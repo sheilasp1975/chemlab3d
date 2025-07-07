@@ -8,47 +8,320 @@
         body { 
             margin: 0; 
             font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: #000;
+            overflow: hidden;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 10px;
+            z-index: 100;
+            max-width: 300px;
+        }
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            padding: 15px;
+            border-radius: 10px;
             color: white;
             text-align: center;
-            padding: 50px 20px;
         }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
         }
-        h1 { font-size: 3em; margin-bottom: 20px; }
-        .status { 
-            background: rgba(255,255,255,0.1); 
-            padding: 20px; 
-            border-radius: 10px;
-            margin: 20px 0;
+        button:hover {
+            background: #45a049;
         }
-        .coming-soon {
-            font-size: 1.2em;
-            margin: 30px 0;
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🧪 ChemLab 3D - Laboratorio Virtual</h1>
-        <p>Simulador web 3D de laboratorio químico</p>
-        
-        <div class="status">
-            <h2>🚀 Proyecto en Desarrollo</h2>
-            <p>Creando el primer experimento: <strong>Titulación Ácido-Base</strong></p>
-            <p>Semana 1 de 12 - Configuración inicial completada ✅</p>
-        </div>
-        
-        <div class="coming-soon">
-            <h3>Próximamente:</h3>
-            <p>• Laboratorio 3D interactivo</p>
-            <p>• Experimentos del Currículo Nacional MINEDU</p>
-            <p>• Funciona en cualquier smartphone</p>
-        </div>
-        
-        <p><em>Democratizando la educación química experimental en Perú</em></p>
+    <div id="info">
+        <h3>🧪 ChemLab 3D</h3>
+        <p><strong>Laboratorio Virtual Funcionando!</strong></p>
+        <p>• Usa el mouse para rotar la vista</p>
+        <p>• Scroll para zoom</p>
+        <p>• Clickea objetos para interactuar</p>
     </div>
+
+    <div id="canvas-container"></div>
+
+    <div id="controls">
+        <h4>Experimento: Titulación Ácido-Base</h4>
+        <button onclick="resetExperiment()">Reiniciar</button>
+        <button onclick="addDrop()">Agregar Gota NaOH</button>
+        <span id="status">pH: 1.0 | Gotas: 0</span>
+    </div>
+
+    <!-- Three.js desde CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <script>
+        // Variables globales
+        let scene, camera, renderer, controls;
+        let beaker, liquid, bureta;
+        let drops = 0;
+        let ph = 1.0;
+
+        // Inicializar la escena 3D
+        function init() {
+            // Crear escena
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB); // Azul cielo
+
+            // Crear cámara
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(0, 2, 5);
+
+            // Crear renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            // Agregar luces
+            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(10, 10, 5);
+            directionalLight.castShadow = true;
+            scene.add(directionalLight);
+
+            // Crear mesa de laboratorio
+            createTable();
+            
+            // Crear equipos de laboratorio
+            createBeaker();
+            createBureta();
+            createLiquid();
+
+            // Controles de mouse básicos
+            addBasicControls();
+
+            // Iniciar renderizado
+            animate();
+        }
+
+        function createTable() {
+            const tableGeometry = new THREE.BoxGeometry(6, 0.2, 4);
+            const tableMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+            const table = new THREE.Mesh(tableGeometry, tableMaterial);
+            table.position.y = -1;
+            table.receiveShadow = true;
+            scene.add(table);
+        }
+
+        function createBeaker() {
+            // Vaso de precipitados transparente
+            const beakerGeometry = new THREE.CylinderGeometry(0.8, 0.8, 1.5, 32);
+            const beakerMaterial = new THREE.MeshPhysicalMaterial({
+                color: 0xffffff,
+                transparent: true,
+                opacity: 0.3,
+                roughness: 0.1,
+                transmission: 0.9
+            });
+            beaker = new THREE.Mesh(beakerGeometry, beakerMaterial);
+            beaker.position.set(0, 0, 0);
+            beaker.castShadow = true;
+            scene.add(beaker);
+        }
+
+        function createBureta() {
+            // Bureta (tubo largo y delgado)
+            const buretaGeometry = new THREE.CylinderGeometry(0.1, 0.1, 2, 16);
+            const buretaMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0xffffff, 
+                transparent: true, 
+                opacity: 0.8 
+            });
+            bureta = new THREE.Mesh(buretaGeometry, buretaMaterial);
+            bureta.position.set(1.5, 1.5, 0);
+            bureta.castShadow = true;
+            scene.add(bureta);
+
+            // Soporte de bureta
+            const supportGeometry = new THREE.CylinderGeometry(0.05, 0.05, 3, 8);
+            const supportMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 });
+            const support = new THREE.Mesh(supportGeometry, supportMaterial);
+            support.position.set(1.5, 0.5, 0);
+            scene.add(support);
+        }
+
+        function createLiquid() {
+            // Líquido dentro del vaso (inicialmente rojo = ácido)
+            const liquidGeometry = new THREE.CylinderGeometry(0.75, 0.75, 0.3, 32);
+            const liquidMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0xff0000,
+                transparent: true,
+                opacity: 0.8 
+            });
+            liquid = new THREE.Mesh(liquidGeometry, liquidMaterial);
+            liquid.position.set(0, -0.6, 0);
+            scene.add(liquid);
+        }
+
+        function addBasicControls() {
+            // Controles de mouse simples
+            let mouseDown = false;
+            let mouseX = 0;
+            let mouseY = 0;
+
+            renderer.domElement.addEventListener('mousedown', (event) => {
+                mouseDown = true;
+                mouseX = event.clientX;
+                mouseY = event.clientY;
+            });
+
+            renderer.domElement.addEventListener('mouseup', () => {
+                mouseDown = false;
+            });
+
+            renderer.domElement.addEventListener('mousemove', (event) => {
+                if (!mouseDown) return;
+
+                const deltaX = event.clientX - mouseX;
+                const deltaY = event.clientY - mouseY;
+
+                // Rotar cámara alrededor de la escena
+                const spherical = new THREE.Spherical();
+                spherical.setFromVector3(camera.position);
+                spherical.theta -= deltaX * 0.01;
+                spherical.phi += deltaY * 0.01;
+                spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi));
+
+                camera.position.setFromSpherical(spherical);
+                camera.lookAt(0, 0, 0);
+
+                mouseX = event.clientX;
+                mouseY = event.clientY;
+            });
+
+            // Zoom con scroll
+            renderer.domElement.addEventListener('wheel', (event) => {
+                const distance = camera.position.length();
+                const newDistance = distance + event.deltaY * 0.01;
+                camera.position.normalize().multiplyScalar(Math.max(2, Math.min(10, newDistance)));
+            });
+        }
+
+        // Funciones del experimento
+        function addDrop() {
+            drops++;
+            ph = calculatePH(drops);
+            updateLiquidColor(ph);
+            updateStatus();
+
+            // Animación de gota cayendo
+            animateDrop();
+        }
+
+        function calculatePH(drops) {
+            // Cálculo químico real simplificado
+            const totalVolume = 25 + drops; // 25mL HCl inicial + 1mL por gota NaOH
+            
+            if (drops < 20) {
+                // Exceso de ácido
+                return 1 + (drops * 0.3);
+            } else if (drops === 20) {
+                // Punto de equivalencia
+                return 7;
+            } else {
+                // Exceso de base
+                return 7 + ((drops - 20) * 0.3);
+            }
+        }
+
+        function updateLiquidColor(ph) {
+            if (ph < 7) {
+                // Rojo para ácido
+                liquid.material.color.setHex(0xff0000);
+            } else if (ph === 7) {
+                // Púrpura para punto de equivalencia
+                liquid.material.color.setHex(0x800080);
+            } else {
+                // Azul para básico
+                liquid.material.color.setHex(0x0000ff);
+            }
+        }
+
+        function updateStatus() {
+            document.getElementById('status').textContent = `pH: ${ph.toFixed(1)} | Gotas: ${drops}`;
+            
+            if (drops === 20) {
+                document.getElementById('status').textContent += ' | ¡PUNTO DE EQUIVALENCIA!';
+            }
+        }
+
+        function animateDrop() {
+            // Crear gota temporal
+            const dropGeometry = new THREE.SphereGeometry(0.05, 8, 8);
+            const dropMaterial = new THREE.MeshLambertMaterial({ color: 0x00ff00 });
+            const drop = new THREE.Mesh(dropGeometry, dropMaterial);
+            drop.position.set(1.5, 2.5, 0);
+            scene.add(drop);
+
+            // Animar caída
+            const startY = 2.5;
+            const endY = -0.3;
+            const duration = 1000; // 1 segundo
+            const startTime = Date.now();
+
+            function animateDropFall() {
+                const elapsed = Date.now() - startTime;
+                const progress = Math.min(elapsed / duration, 1);
+                
+                drop.position.y = startY + (endY - startY) * progress;
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animateDropFall);
+                } else {
+                    scene.remove(drop);
+                }
+            }
+            animateDropFall();
+        }
+
+        function resetExperiment() {
+            drops = 0;
+            ph = 1.0;
+            updateLiquidColor(ph);
+            updateStatus();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        // Inicializar cuando la página carga
+        window.addEventListener('load', init);
+
+        // Redimensionar cuando cambia el tamaño de ventana
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
 </body>
 </html>
